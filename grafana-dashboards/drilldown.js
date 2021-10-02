@@ -6,6 +6,9 @@
  * supplied URL parameters (in the ARGS variable)
  *
  * Return a dashboard object, or a function
+ *
+ * For async scripts, return a function, this function must take a single callback function as argument,
+ * call this callback function with the dashboard object (see scripted_async.js for an example)
  */
 
 'use strict';
@@ -13,27 +16,26 @@
 // accessible variables in this scope
 var window, document, ARGS, $, jQuery, moment, kbn;
 
-// Setup some variables
-var dashboard;
+// Setup variables
+var dashboard, timespan;
 
 // All url parameters are available via the ARGS object
 var ARGS;
 
-// Setup the metric dimensions.
-var dimensions = [];
+// Set a default timespan if one isn't specified
+timespan = '1d';
 
-for (var key in ARGS) {
-  var isDimParam = key.startsWith("dim_");
-  if (isDimParam)  {
-     var value = ARGS[key];
-     var dim = {
-       "key":  key.substring(4),
-       "value": value
-     };
-     dimensions.push(dim);
-  }
-}
-
+// keys which should not be dimensions
+var exclusion_keys = [
+  'metric',
+  'type',
+  'slug',
+  'fullscreen',
+  'edit',
+  'panelId',
+  'from',
+  'to'
+];
 
 // Intialize a skeleton with nothing but a rows array and service object
 dashboard = {
@@ -42,58 +44,45 @@ dashboard = {
 
 // Set a title
 dashboard.title = 'Alarm drilldown';
-
-// Set default time
-// time can be overridden in the url using from/to parameters, but this is
-// handled automatically in grafana core during dashboard initialization
 dashboard.time = {
-  from: "now-6h",
+  from: "now-" + (ARGS.from || timespan),
   to: "now"
 };
 
-var rows = 1;
-var metricName = '';
-var hostname = '';
-
-if(!_.isUndefined(ARGS.rows)) {
-  rows = parseInt(ARGS.rows, 10);
-}
+var metricName = 'metricname';
 
 if(!_.isUndefined(ARGS.metric)) {
   metricName = ARGS.metric;
 }
 
-if(!_.isUndefined(ARGS.hostname)) {
-  hostname = ARGS.hostname;
+// Set dimensions
+var dimensions = [];
+for (var key in ARGS) {
+  if (exclusion_keys.indexOf(key) == -1) {
+    dimensions.push({'key': key, 'value': ARGS[key]});
+  }
 }
 
-for (var i = 0; i < rows; i++) {
-
-  dashboard.rows.push({
-    title: 'Chart',
-    height: '300px',
-    panels: [
-      {
-        title: metricName,
-        type: 'graph',
-        span: 12,
-        fill: 1,
-        linewidth: 2,
-        targets: [
-          {
-            "aggregator": "avg",
-            "alias": hostname,
-            "dimensions": dimensions,
-            "metric": metricName,
-            "period": "300",
-          }
-        ],
-        tooltip: {
-          shared: true
+dashboard.rows.push({
+  title: 'Chart',
+  height: '300px',
+  panels: [
+    {
+      title: metricName,
+      type: 'graph',
+      span: 12,
+      fill: 1,
+      linewidth: 2,
+      targets: [
+        {
+          "metric": metricName,
+          "aggregator": "avg",
+          "period": 300,
+          "dimensions": dimensions
         }
-      }
-    ]
-  });
-}
+      ]
+    }
+  ]
+});
 
 return dashboard;
